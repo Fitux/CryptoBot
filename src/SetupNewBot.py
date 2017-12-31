@@ -1,7 +1,7 @@
 #This file right now is only for testing purposes
 
 from chatBot.ChatBot import ChatBot
-bot1 = ChatBot(token='485439619:AAGq3c3JpwYqWacrJjx1Z8nsju1wWEq63iU',superadminid='479199261',adminsid=['479199261'])
+bot1 = ChatBot(token='485439619:AAGq3c3JpwYqWacrJjx1Z8nsju1wWEq63iU',superadminid='479199261',adminsid=['479199261'], debuglevel=2)
 bot1.startPolling()
 
 
@@ -11,4 +11,5 @@ exc1.getListMarkets()
 
 
 from CryptoBot import CryptoBot
-bot1 = CryptoBot(token='485439619:AAGq3c3JpwYqWacrJjx1Z8nsju1wWEq63iU',superadminid='479199261')
+bot1 = CryptoBot(token='485439619:AAGq3c3JpwYqWacrJjx1Z8nsju1wWEq63iU',superadminid='479199261', debuglevel=2)
+bot1.startPolling()

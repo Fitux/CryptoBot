@@ -12,8 +12,10 @@
 # We should be able to start or stop the polling of the messages (Those won't be bot actions)
 
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler
-from telegram.ext import MessageHandler, Filters
+from telegram.ext import MessageHandler, Filters, Handler
+from telegram.ext.dispatcher import DispatcherHandlerStop
 from enum import Enum
+from collections import defaultdict
 
 class BotState(Enum):
 	DEACTIVATED = 0
@@ -34,24 +36,36 @@ class ChatBot(object):
 	__accessToken = None
 	__botUpdater = None
 	__botDispatcher = None
-	__botHandlers = []
 	__botAdmins = []
 	__botSuperAdmin = None
+	__deactivatedHandler = None
+	
+	_unknownHandler = None
+	_debugLevel = None
 
-	def __init__(self, token, superadminid, adminsid=[]):
+	def __init__(self, token, superadminid, adminsid=[], debuglevel=0):
 		# Defining the basic variables needed to work
 		# The __currentState will be based on the BotState Enum implementation
 		# The __accessToken is the identifier needed for the bot to connect
 		# The __botSuperAdmin is the administrator that shouldn't be removed by any circunstances
 		# The __botAdmins are the other administrators that can execute the bot commands
 
+		self._debugLevel = debuglevel
+
+		if (self._debugLevel > 0): print "Debug Level: " + str(debuglevel) + "\n"
+
 		self.__currentState = BotState.DEACTIVATED
+		if (self._debugLevel >= 1): print "Bot Deactivated\n"
 		self.__accessToken = token
+		if (self._debugLevel >= 1): print "Token: " + token + "\n"
 		self.__botSuperAdmin = superadminid
+		if (self._debugLevel >= 1): print "SuperAdmin: " + superadminid + "\n"
 		self.__botAdmins.append (superadminid)
+
 
 		for personid in adminsid:
 			if(personid not in self.__botAdmins):
+				if (self._debugLevel >= 1): print "Admin: " + personid
 				self.__botAdmins.append (personid)
 
 		# The __isPolling is a flag that will let us know if the bot is polling for messages
@@ -61,33 +75,60 @@ class ChatBot(object):
 		self.__botUpdater = Updater(token=self.__accessToken)
 		self.__botDispatcher = self.__botUpdater.dispatcher
 
+		self.__deactivatedHandler = MessageHandler(Filters.command, self.__deactivatedCommand)
+		self._unknownHandler = MessageHandler(Filters.command, self.__unknownCommand)
+
+		if (self._debugLevel >= 1): print "Adding Priority Handlers\n"
+		# Here we will add all the priority handlers needed for the chat bot
+		self._addCommandHandler('startBot', self.__startBot, group=0)
+		self._addCommandHandler('stopBot', self.__stopBot, group=0)
+		self._addCommandHandler('resumeBot', self.__resumeBot, group=0)
+		self._addCommandHandler('sleepBot', self.__sleepBot, group=0)
+		self._addCommandHandler('botState', self.__getCurrentState, group=0)
+
+		self._addHandler(self.__deactivatedHandler, group=0)
+
+		if (self._debugLevel >= 1): print "Adding Other Handlers\n"
 		# Here we will add all the basic handlers needed for the chat bot
-		self.__botHandlers.append (CommandHandler('startBot', self.__startBot))
-		self.__botHandlers.append (CommandHandler('stopBot', self.__stopBot))
-		self.__botHandlers.append (CommandHandler('resumeBot', self.__resumeBot))
-		self.__botHandlers.append (CommandHandler('sleepBot', self.__sleepBot))
-		self.__botHandlers.append (CommandHandler('listAdmins', self.__listAdmins))
-		self.__botHandlers.append (CommandHandler('removeAdmin', self.__removeAdmin, pass_args=True))
-		self.__botHandlers.append (CommandHandler('addAdmin', self.__addAdmin, pass_args=True))
-		self.__botHandlers.append (CommandHandler('myUserId', self.__getUserId))
-		self.__botHandlers.append (CommandHandler('botState', self.__getCurrentState))
+		self._addCommandHandler('listAdmins', self.__listAdmins)
+		self._addCommandHandler('removeAdmin', self.__removeAdmin, pass_args=True)
+		self._addCommandHandler('addAdmin', self.__addAdmin, pass_args=True)
+		self._addCommandHandler('myUserId', self.__getUserId)
 
-		# This should be always the last handler added so will be only used when it does not recognize the command
-		self.__botHandlers.append (MessageHandler(Filters.command, self.__unknownCommand))
-
-		for handler in self.__botHandlers:
-			self.__botDispatcher.add_handler(handler)
+		self._addHandler(self._unknownHandler)
 
 		return
 
 	# This first set of functions are used to configurate the bot and its workings
 	# those not altere the bot's behavior in any way
 
+	# Function to add new handlers to the bot, it should be only used during the init of the class
+	def _addCommandHandler(self, command, callback, pass_args=False, group=1):
+		if (self._debugLevel >= 2): print "Adding Command Handler: " + command
+		self.__botDispatcher.add_handler(CommandHandler(command, callback, pass_args=pass_args), group=group)
+		return
+
+	def _addMessageHandler(self, filters, callback, group=1):
+		if (self._debugLevel >= 2): print "Adding Message Handler"
+		self.__botDispatcher.add_handler(MessageHandler(filters, callback), group=group)
+		return
+
+	def _addHandler(self, handler, group=1):
+		if (self._debugLevel >= 2): print "Adding Handler"
+		self.__botDispatcher.add_handler(handler, group=group)
+		return
+
+	def _removeHandler(self, handler, group=1):
+		if (self._debugLevel >= 2): print "Removing Handler"
+		self.__botDispatcher.remove_handler(handler, group=group)
+		return
+
 	# Function to make the bot start polling for messages
 	def startPolling(self):
 		if(self.__isPolling):
 			return False
 
+		if (self._debugLevel >= 1): print "Started Polling\n"
 		self.__isPolling = True
 		self.__botUpdater.start_polling()
 		return True
@@ -97,6 +138,7 @@ class ChatBot(object):
 		if(not self.__isPolling):
 			return False
 
+		if (self._debugLevel >= 1): print "Stopped Polling\n"
 		self.__isPolling = False
 		self.__botUpdater.stop()
 		return True
@@ -109,6 +151,7 @@ class ChatBot(object):
 	def addAdmins(self, adminsid):
 		for personid in adminsid:
 			if(personid not in self.__botAdmins):
+				if (self._debugLevel >= 1): print "Adding Admin: " + personid + "\n"
 				self.__botAdmins.append (personid)
 
 		return
@@ -117,6 +160,7 @@ class ChatBot(object):
 	def removeAdmins(self, adminsid):
 		for personid in adminsid:
 			if(personid in self.__botAdmins and personid != self.__botSuperAdmin):
+				if (self._debugLevel >= 1): print "Removing Admin: " + personid + "\n"
 				self.__botAdmins.remove (personid)
 
 		return
@@ -134,10 +178,23 @@ class ChatBot(object):
 		return self.__currentState
 
 	# This set of functions will be the callback options that will define the bot's behavior
+	def __deactivatedCommand(self, bot, update):
+		chatId = update.message.chat_id
+		returningMessage = "Sorry, I'm not working right now"
+
+		if (self._debugLevel >= 1): print "Deactivated command"
+
+		bot.send_message(chat_id=chatId, text=returningMessage)
+
+		raise DispatcherHandlerStop
+		return
 
 	def __unknownCommand(self, bot, update):
 		chatId = update.message.chat_id
 		returningMessage = "Sorry, I don't understand your request"
+
+		if (self._debugLevel >= 1): print "Unknown command"
+
 		bot.send_message(chat_id=chatId, text=returningMessage)
 
 		return
@@ -146,6 +203,8 @@ class ChatBot(object):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
 		
+		if (self._debugLevel >= 1): print "Add admin command"
+
 		if (userId != self.__superAdmin):
 			returningMessage = "Only the real boss can add new admins!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
@@ -158,6 +217,8 @@ class ChatBot(object):
 	def __removeAdmin(self, bot, update, args):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
+
+		if (self._debugLevel >= 1): print "Remove Admin command"
 		
 		if (userId != self.__superAdmin):
 			returningMessage = "Only the real boss can add new admins!"
@@ -172,6 +233,8 @@ class ChatBot(object):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
 		returningMessage = ""
+
+		if (self._debugLevel >= 1): print "List Admins command"
 
 		if (userId not in self.__botAdmins):
 			returningMessage = "You are not my boss!"
@@ -188,6 +251,9 @@ class ChatBot(object):
 	def __getUserId(self, bot, update):
 		chatId = update.message.chat_id
 		returningMessage = "Your id is: " + str(update.message.from_user.id)
+
+		if (self._debugLevel >= 1): print "User ID command"
+
 		bot.send_message(chat_id=chatId, text=returningMessage)
 
 		return
@@ -195,80 +261,116 @@ class ChatBot(object):
 	def __resumeBot(self, bot, update):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
-		
+
+		if (self._debugLevel >= 1): print "Resume Command"
+
 		if (userId not in self.__botAdmins):
 			returningMessage = "You are not my boss!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 
 		if (self.__currentState != BotState.SLEEPING):
 			returningMessage = "I'm not sleeping!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 		
+		if (self._debugLevel >= 1): print "Resuming..."
+
 		returningMessage = "Let's start working again!"
 		bot.send_message(chat_id=chatId, text=returningMessage)
 		self.__currentState = BotState.ACTIVATED
 
+		self.__botDispatcher.remove_handler(self.__deactivatedHandler, group=0)
+		raise DispatcherHandlerStop
 		return
 
 	def __startBot(self, bot, update):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
+
+		if (self._debugLevel >= 1): print "Start command"
 		
 		if (userId not in self.__botAdmins):
 			returningMessage = "You are not my boss!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 
 		if (self.__currentState != BotState.DEACTIVATED):
 			returningMessage = "I'm already working!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 		
+		if (self._debugLevel >= 1): print "Starting..."
+
 		returningMessage = "Let's start working!"
 		bot.send_message(chat_id=chatId, text=returningMessage)
 		self.__currentState = BotState.ACTIVATED
 
+		self.__botDispatcher.remove_handler(self.__deactivatedHandler, group=0)
+		raise DispatcherHandlerStop
 		return
 
 	def __stopBot(self, bot, update):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
-		
+
+		if (self._debugLevel >= 1): print "Stop command"
+
 		if (userId not in self.__botAdmins):
 			returningMessage = "You are not my boss!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 
+		if (self._debugLevel >= 1): print "Stopping..."
 		returningMessage = "Good bye!"
 		bot.send_message(chat_id=chatId, text=returningMessage)
 		self.__currentState = BotState.DEACTIVATED
 
+		self.__botDispatcher.remove_handler(self.__deactivatedHandler, group=0)
+		self.__botDispatcher.add_handler(self.__deactivatedHandler, group=0)
+
+		raise DispatcherHandlerStop
 		return
 
 	def __sleepBot(self, bot, update):
 		chatId = update.message.chat_id
 		userId = str(update.message.from_user.id)
 		
+		if (self._debugLevel >= 1): print "Sleep command"
+
 		if (userId not in self.__botAdmins):
 			returningMessage = "You are not my boss!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
 
 		if (self.__currentState != BotState.ACTIVATED):
 			returningMessage = "I'm not working right now!"
 			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
 			return
+
+		if (self._debugLevel >= 1): print "Sleeping..."
 
 		returningMessage = "Good bye!"
 		bot.send_message(chat_id=chatId, text=returningMessage)
 		self.__currentState = BotState.SLEEPING
 
+		self.__botDispatcher.remove_handler(self.__deactivatedHandler, group=0)
+		self.__botDispatcher.add_handler(self.__deactivatedHandler, group=0)
+
+		raise DispatcherHandlerStop
 		return
 
 	def __getCurrentState(self, bot, update):
 		chatId = update.message.chat_id
+
+		if (self._debugLevel >= 1): print "Get State command\n"
 
 		if(self.__currentState == BotState.ACTIVATED):
 			returningMessage = "I'm working"
@@ -281,4 +383,5 @@ class ChatBot(object):
 
 		bot.send_message(chat_id=chatId, text=returningMessage)
 
-		return
+		raise DispatcherHandlerStop
+		return 
