@@ -151,9 +151,7 @@ class ChatBot(object):
 			bot.send_message(chat_id=chatId, text=returningMessage)
 			return
 
-		for personid in args:
-			if(personid not in self.__botAdmins):
-				self.__botAdmins.append (personid)
+		self.addAdmins(args)
 
 		return
 
@@ -166,9 +164,7 @@ class ChatBot(object):
 			bot.send_message(chat_id=chatId, text=returningMessage)
 			return
 
-		for personid in args:
-			if(personid in self.__botAdmins and personid != self.__botSuperAdmin):
-				self.__botAdmins.remove (personid)
+		self.removeAdmins(args)
 
 		return
 
