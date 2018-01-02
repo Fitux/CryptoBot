@@ -31,15 +31,23 @@ class ChatBot(object):
 	# The __isPolling is a flag that will let us know if the bot is polling for messages
 	# The __botUpdater is the one in charge of update the chatbot and contains the dispatcher
 	# The __botDispatcher is the one in charge of call the correct handlers used by the messages
+	# The __listCommands is the list where we can know all the commands the bot has
+	# The __deactivatedHandler will be the one in charge of not letting people use the bot when it is not running
+	# The _unknownHandler will be the one in charge of answering when the received command does not match any of the available commands
+	# The _debuglevel is the flag used to enable the printing messages for debugging
+
 	__isPolling = None
 	__currentState = None
 	__accessToken = None
 	__botUpdater = None
 	__botDispatcher = None
-	__botAdmins = []
 	__botSuperAdmin = None
-	__deactivatedHandler = None
+
+	__listCommands = {}
+	__botAdmins = []
 	
+	__deactivatedHandler = None
+
 	_unknownHandler = None
 	_debugLevel = None
 
@@ -85,16 +93,14 @@ class ChatBot(object):
 		self._addCommandHandler('resumeBot', self.__resumeBot, group=0)
 		self._addCommandHandler('sleepBot', self.__sleepBot, group=0)
 		self._addCommandHandler('botState', self.__getCurrentState, group=0)
+		self._addCommandHandler('listCommands', self.__getlistCommands, group=0)
+		self._addCommandHandler('listAdmins', self.__listAdmins, group=0)
+		self._addCommandHandler('removeAdmin', self.__removeAdmin, pass_args=True, group=0)
+		self._addCommandHandler('addAdmin', self.__addAdmin, pass_args=True, group=0)
+		self._addCommandHandler('myUserId', self.__getUserId, group=0)
 
+		self._addCommandHandler('help', self.__getlistCommands, group=1)
 		self._addHandler(self.__deactivatedHandler, group=0)
-
-		if (self._debugLevel >= 1): print "Adding Other Handlers\n"
-		# Here we will add all the basic handlers needed for the chat bot
-		self._addCommandHandler('listAdmins', self.__listAdmins)
-		self._addCommandHandler('removeAdmin', self.__removeAdmin, pass_args=True)
-		self._addCommandHandler('addAdmin', self.__addAdmin, pass_args=True)
-		self._addCommandHandler('myUserId', self.__getUserId)
-
 		self._addHandler(self._unknownHandler)
 
 		return
@@ -106,6 +112,7 @@ class ChatBot(object):
 	def _addCommandHandler(self, command, callback, pass_args=False, group=1):
 		if (self._debugLevel >= 2): print "Adding Command Handler: " + command
 		self.__botDispatcher.add_handler(CommandHandler(command, callback, pass_args=pass_args), group=group)
+		self.__listCommands[command] = group
 		return
 
 	def _addMessageHandler(self, filters, callback, group=1):
@@ -177,7 +184,27 @@ class ChatBot(object):
 	def getCurrentState(self):
 		return self.__currentState
 
+	# Returns the list of available commands
+	def getListCommands(self):
+		return self.__listCommands
+
 	# This set of functions will be the callback options that will define the bot's behavior
+	def __getlistCommands(self, bot, update):
+		chatId = update.message.chat_id
+		userId = str(update.message.from_user.id)
+		returningMessage = "Here is the list of commands\n"
+
+		if (self._debugLevel >= 1): print "Help command"
+
+		for command in self.__listCommands:
+			if(self.__listCommands[command] or userId in self.__botAdmins):
+				returningMessage += "/" + command + "\n"
+
+		bot.send_message(chat_id=chatId, text=returningMessage)
+
+		raise DispatcherHandlerStop
+		return
+
 	def __deactivatedCommand(self, bot, update):
 		chatId = update.message.chat_id
 		returningMessage = "Sorry, I'm not working right now"

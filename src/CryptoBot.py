@@ -154,7 +154,7 @@ class CryptoBot(ChatBot):
 		infoString = ""
 
 		if (self._debugLevel >= 1): print "Getting String Info"
-		if (self._debugLevel >= 2): print "Field: " + field
+		if (self._debugLevel >= 2): print "Field: " + str(field)
 		if (self._debugLevel >= 2): print "Coins: " + str(coins)
 
 		for coin in coins:
