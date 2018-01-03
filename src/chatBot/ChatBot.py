@@ -45,6 +45,7 @@ class ChatBot(object):
 
 	__listCommands = {}
 	__botAdmins = []
+	__botBanned = []
 	
 	__deactivatedHandler = None
 
@@ -83,6 +84,7 @@ class ChatBot(object):
 		self.__botUpdater = Updater(token=self.__accessToken)
 		self.__botDispatcher = self.__botUpdater.dispatcher
 
+		self.__bannedHandler = MessageHandler(Filters.command, self.__bannedCommand)
 		self.__deactivatedHandler = MessageHandler(Filters.command, self.__deactivatedCommand)
 		self._unknownHandler = MessageHandler(Filters.command, self.__unknownCommand)
 
@@ -98,8 +100,11 @@ class ChatBot(object):
 		self._addCommandHandler('removeAdmin', self.__removeAdmin, pass_args=True, group=0)
 		self._addCommandHandler('addAdmin', self.__addAdmin, pass_args=True, group=0)
 		self._addCommandHandler('myUserId', self.__getUserId, group=0)
+		self._addCommandHandler('banUser', self.__banUser, group=0)
+		self._addCommandHandler('unbanUser', self.__unbanUser, group=0)
 
 		self._addCommandHandler('help', self.__getlistCommands, group=1)
+		self._addHandler(self.__bannedHandler, group=-1)
 		self._addHandler(self.__deactivatedHandler, group=0)
 		self._addHandler(self._unknownHandler)
 
@@ -188,6 +193,25 @@ class ChatBot(object):
 	def getListCommands(self):
 		return self.__listCommands
 
+	def unbanUsers(self, usersid):
+		for personid in usersid:
+			if(personid in self.__botBanned):
+				if (self._debugLevel >= 1): print "Unbanning User: " + personid + "\n"
+				self.__botAdmins.remove (personid)
+
+		return
+
+	def banUsers(self, usersid):
+		for personid in usersid:
+			if(personid not in self.__botBanned and personid not in self.__botAdmins):
+				if (self._debugLevel >= 1): print "Banning User: " + personid + "\n"
+				self.__botAdmins.append (personid)
+
+		return
+
+	def getBannedUsers(self):
+		return self.__botBanned
+
 	# This set of functions will be the callback options that will define the bot's behavior
 	def __getlistCommands(self, bot, update):
 		chatId = update.message.chat_id
@@ -203,6 +227,19 @@ class ChatBot(object):
 		bot.send_message(chat_id=chatId, text=returningMessage)
 
 		raise DispatcherHandlerStop
+		return
+
+	def __bannedCommand(self, bot, update):
+		chatId = update.message.chat_id
+		userId = str(update.message.from_user.id)
+		returningMessage = "You can't use this bot since you are banned"
+
+		if (userId in self.__botBanned):
+			if (self._debugLevel >= 1): print "Banned command"
+			bot.send_message(chat_id=chatId, text=returningMessage)
+			raise DispatcherHandlerStop
+			return
+
 		return
 
 	def __deactivatedCommand(self, bot, update):
@@ -223,6 +260,36 @@ class ChatBot(object):
 		if (self._debugLevel >= 1): print "Unknown command"
 
 		bot.send_message(chat_id=chatId, text=returningMessage)
+
+		return
+
+	def __banUser(self, bot, update, args):
+		chatId = update.message.chat_id
+		userId = str(update.message.from_user.id)
+		
+		if (self._debugLevel >= 1): print "Ban user command"
+
+		if (userId not in self.__botAdmins):
+			returningMessage = "Only admins ban users!"
+			bot.send_message(chat_id=chatId, text=returningMessage)
+			return
+
+		self.banUsers(args)
+
+		return
+
+	def __unbanUser(self, bot, update, args):
+		chatId = update.message.chat_id
+		userId = str(update.message.from_user.id)
+		
+		if (self._debugLevel >= 1): print "Unban user command"
+
+		if (userId not in self.__botAdmins):
+			returningMessage = "Only admins unban users!"
+			bot.send_message(chat_id=chatId, text=returningMessage)
+			return
+
+		self.unbanUsers(args)
 
 		return
 
